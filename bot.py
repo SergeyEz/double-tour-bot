@@ -1,5 +1,7 @@
 import os
 import logging
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -28,6 +30,23 @@ LINKS = {
     "sheregesh_info": "https://vk.com/@-88867-gornolyzhnyi-tur-v-sheregesh-daty-ceny-programma-faq",
     "sheregesh_schedule": "https://vk.com/double.community",
 }
+
+# === Простой HTTP сервер для Render ===
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Bot is running!')
+    
+    def log_message(self, format, *args):
+        logger.info("%s - %s" % (self.address_string(), format % args))
+
+def run_http_server():
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
+    logger.info(f"HTTP server running on port {port}")
+    server.serve_forever()
 
 # === Обработчики команд ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -123,7 +142,7 @@ async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await query.edit_message_text(
             "🔥 *Тур в Шерегеш*\n\n"
-            "Самый крутой сноубордический курорт Сибири!",
+            "Самый крутой сноубордический курорт Сибии!",
             reply_markup=reply_markup,
             parse_mode="Markdown"
         )
@@ -149,7 +168,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # === Главная функция запуска ===
 def main():
-    # Создаём приложение
+    # Запускаем HTTP сервер в отдельном потоке
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
+
+    # Создаём приложение бота
     application = Application.builder().token(TOKEN).build()
 
     # Добавляем обработчики
@@ -157,7 +180,7 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(button_handler))
 
-    # Запускаем polling
+    # Запускаем polling бота
     print("Бот запускается...")
     logger.info("Бот запущен и готов к работе!")
     application.run_polling()
