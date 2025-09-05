@@ -1,7 +1,7 @@
 import os
 import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 
 # === Настройка логирования ===
 logging.basicConfig(
@@ -30,7 +30,7 @@ LINKS = {
 }
 
 # === Обработчики команд ===
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def start(update: Update, context: CallbackContext):
     keyboard = [
         [InlineKeyboardButton("🌐 Сайт", url=LINKS["site"])],
         [InlineKeyboardButton("📸 Instagram", url=LINKS["inst"])],
@@ -48,15 +48,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
     elif update.callback_query:
         try:
-            await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+            update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
         except Exception as e:
             if "Message is not modified" not in str(e):
                 logger.error(f"Ошибка в start: {e}")
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def help_command(update: Update, context: CallbackContext):
     text = (
         "ℹ️ *Справка по боту*\n\n"
         "Доступные команды:\n"
@@ -64,11 +64,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/help — эта справка\n\n"
         "Если остались вопросы — нажми кнопку *«Остались вопросы»*."
     )
-    await update.message.reply_text(text, parse_mode="Markdown")
+    update.message.reply_text(text, parse_mode="Markdown")
 
-async def mountain_tours(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def mountain_tours(update: Update, context: CallbackContext):
     query = update.callback_query
-    await query.answer()
+    query.answer()
 
     keyboard = [
         [InlineKeyboardButton("📍 Кировск", callback_data="kirovsk")],
@@ -78,14 +78,14 @@ async def mountain_tours(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
-        await query.edit_message_text("🌍 Выбери направление:", reply_markup=reply_markup)
+        query.edit_message_text("🌍 Выбери направление:", reply_markup=reply_markup)
     except Exception as e:
         if "Message is not modified" not in str(e):
             logger.error(f"Ошибка в mountain_tours: {e}")
 
-async def kirovsk_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def kirovsk_menu(update: Update, context: CallbackContext):
     query = update.callback_query
-    await query.answer()
+    query.answer()
 
     keyboard = [
         [InlineKeyboardButton("ℹ️ Инфо о туре", url=LINKS["kirovsk_info"])],
@@ -97,7 +97,7 @@ async def kirovsk_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
-        await query.edit_message_text(
+        query.edit_message_text(
             "📍 *Тур в Кировск*\n\n"
             "Горнолыжный курорт Хибины, северное сияние, экстрим и природа!",
             reply_markup=reply_markup,
@@ -107,9 +107,9 @@ async def kirovsk_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if "Message is not modified" not in str(e):
             logger.error(f"Ошибка в kirovsk_menu: {e}")
 
-async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def sheregesh_menu(update: Update, context: CallbackContext):
     query = update.callback_query
-    await query.answer()
+    query.answer()
 
     keyboard = [
         [InlineKeyboardButton("ℹ️ Инфо о туре", url=LINKS["sheregesh_info"])],
@@ -121,7 +121,7 @@ async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
-        await query.edit_message_text(
+        query.edit_message_text(
             "🔥 *Тур в Шерегеш*\n\n"
             "Самый крутой сноубордический курорт Сибири!",
             reply_markup=reply_markup,
@@ -132,35 +132,39 @@ async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"Ошибка в sheregesh_menu: {e}")
 
 # === Обработчик кнопок ===
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+def button_handler(update: Update, context: CallbackContext):
     query = update.callback_query
-    await query.answer()
+    query.answer()
     
     data = query.data
 
     if data == "mountain_tours":
-        await mountain_tours(update, context)
+        mountain_tours(update, context)
     elif data == "kirovsk":
-        await kirovsk_menu(update, context)
+        kirovsk_menu(update, context)
     elif data == "sheregesh":
-        await sheregesh_menu(update, context)
+        sheregesh_menu(update, context)
     elif data == "start":
-        await start(update, context)
+        start(update, context)
 
 # === Главная функция запуска ===
 def main():
-    # Создаём приложение
-    application = Application.builder().token(TOKEN).build()
+    # Создаём updater
+    updater = Updater(TOKEN, use_context=True)
+    
+    # Получаем dispatcher
+    dp = updater.dispatcher
 
     # Добавляем обработчики
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CallbackQueryHandler(button_handler))
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("help", help_command))
+    dp.add_handler(CallbackQueryHandler(button_handler))
 
     # Запускаем polling
     print("Бот запускается...")
     logger.info("Бот запущен и готов к работе!")
-    application.run_polling()
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
