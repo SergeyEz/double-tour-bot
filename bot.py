@@ -4,9 +4,8 @@ import logging
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 import json
-import asyncio
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # === Настройка логирования ===
@@ -27,16 +26,15 @@ LINKS = {
     "inst": "https://www.instagram.com/double.community?igsh=dTY3bDU0ZWprdmg0",
     "vk": "https://vk.com/double.community",
     "tg_channel": "https://t.me/Doubleride",
-    "corob": "https://vk.com/board88867",  # Запись на выезд коробом
-    "booking": "https://vk.com/im?sel=-88867",  # Бронь и вопросы
+    "corob": "https://vk.com/board88867",
+    "booking": "https://vk.com/im?sel=-88867",
     "kirovsk_info": "https://vk.com/@-88867-pro-tur-v-hibiny",
     "kirovsk_schedule": "https://vk.com/@-88867-raspisanie-gornolyzhnyh-turov-na-sezon-2021-22-vmeste-s-doub",
     "sheregesh_info": "https://vk.com/@-88867-gornolyzhnyi-tur-v-sheregesh-daty-ceny-programma-faq",
-    "sheregesh_schedule": "https://vk.com/double.community",  # резерв
+    "sheregesh_schedule": "https://vk.com/double.community",
 }
 
 # === Обработчики команд ===
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🌐 Сайт", url=LINKS["site"])],
@@ -57,8 +55,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
     elif update.callback_query:
-        await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
-
+        try:
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+        except Exception as e:
+            if "Message is not modified" not in str(e):
+                logger.error(f"Ошибка в start: {e}")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
@@ -69,7 +70,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Если остались вопросы — нажми кнопку *«Остались вопросы»*."
     )
     await update.message.reply_text(text, parse_mode="Markdown")
-
 
 async def mountain_tours(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -82,8 +82,11 @@ async def mountain_tours(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text("🌍 Выбери направление:", reply_markup=reply_markup)
-
+    try:
+        await query.edit_message_text("🌍 Выбери направление:", reply_markup=reply_markup)
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            logger.error(f"Ошибка в mountain_tours: {e}")
 
 async def kirovsk_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -98,13 +101,16 @@ async def kirovsk_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(
-        "📍 *Тур в Кировск*\n\n"
-        "Горнолыжный курорт Хибины, северное сияние, экстрим и природа!",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
-    )
-
+    try:
+        await query.edit_message_text(
+            "📍 *Тур в Кировск*\n\n"
+            "Горнолыжный курорт Хибины, северное сияние, экстрим и природа!",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            logger.error(f"Ошибка в kirovsk_menu: {e}")
 
 async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -119,13 +125,16 @@ async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(
-        "🔥 *Тур в Шерегеш*\n\n"
-        "Самый крутой сноубордический курорт Сибири!",
-        reply_markup=reply_markup,
-        parse_mode="Markdown"
-    )
-
+    try:
+        await query.edit_message_text(
+            "🔥 *Тур в Шерегеш*\n\n"
+            "Самый крутой сноубордический курорт Сибири!",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            logger.error(f"Ошибка в sheregesh_menu: {e}")
 
 # === Обработчик кнопок ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -141,64 +150,25 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "start":
         await start(update, context)
 
-
-# === HTTP-сервер для вебхука ===
-class WebhookHandler(BaseHTTPRequestHandler):
-    def do_POST(self):
-        if self.path == f"/{TOKEN}":
-            try:
-                content_length = int(self.headers['Content-Length'])
-                body = self.rfile.read(content_length)
-                data = json.loads(body.decode('utf-8'))
-                update = Update.de_json(data, application.bot)
-
-                asyncio.run_coroutine_threadsafe(
-                    application.update_queue.put(update),
-                    loop
-                )
-
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"OK")
-            except Exception as e:
-                logger.error(f"Ошибка вебхука: {e}")
-                self.send_response(500)
-                self.end_headers()
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def do_GET(self):
-        if self.path == '/':
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"Telegram Bot is running!")
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-
-# === Запуск бота и сервера ===
+# === Главная функция запуска ===
 def run():
-    global application, loop
+    # Создаём приложение
     application = Application.builder().token(TOKEN).build()
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
 
     # Добавляем обработчики
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(button_handler))
 
-    # Запускаем бота в фоне
-    loop.create_task(application.run_polling())
-
-    # Запускаем веб-сервер
+    # Получаем порт от Render
     port = int(os.getenv("PORT", 10000))
-    server = HTTPServer(('', port), WebhookHandler)
-    logger.info(f"🚀 Веб-сервер запущен на порту {port}")
-    server.serve_forever()
 
+    # Запускаем вебхук
+    application.run_webhook(
+        listen="0.0.0.0",           # обязательно
+        port=port,                   # из переменной окружения
+        webhook_url=f"https://double-tour-bot.onrender.com/{TOKEN}"  # должен совпадать с setWebhook
+    )
 
 if __name__ == "__main__":
     run()
