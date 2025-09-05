@@ -134,6 +134,8 @@ async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # === Обработчик кнопок ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    await query.answer()
+    
     data = query.data
 
     if data == "mountain_tours":
@@ -155,7 +157,8 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(button_handler))
 
-    # Запускаем polling (более надежный для Render)
+    # Запускаем polling
+    print("Бот запускается...")
     application.run_polling()
 
 if __name__ == "__main__":
