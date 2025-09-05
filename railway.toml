@@ -1,0 +1,8 @@
+[build]
+builder = "docker"
+
+[env]
+PYTHON_VERSION = "3.10"
+
+[scripts]
+start = "python bot.py"
