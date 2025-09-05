@@ -169,7 +169,7 @@ def run():
     application.run_webhook(
         listen="0.0.0.0",           # обязательно
         port=port,                   # из переменной окружения
-        webhook_url=f"https://double-tour-bot.onrender.com/{TOKEN.strip()}"
+        webhook_url="https://double-tour-bot.onrender.com/8321023518:AAETz3u5vnF68mcB6Bm5AYCj-W4CuX4qp9c"
     )
 
 if __name__ == "__main__":
