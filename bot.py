@@ -1,7 +1,7 @@
 import os
 import logging
-import asyncio
-from aiohttp import web
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
@@ -32,21 +32,22 @@ LINKS = {
 }
 
 # === Простой HTTP сервер для Render ===
-async def health_check(request):
-    return web.Response(text="Bot is running!")
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b'Bot is running!')
+    
+    def log_message(self, format, *args):
+        # Отключаем стандартное логирование HTTP сервера
+        pass
 
-async def run_http_server():
-    app = web.Application()
-    app.router.add_get('/', health_check)
-    app.router.add_get('/health', health_check)
-    
+def run_http_server():
     port = int(os.getenv("PORT", 10000))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
+    server = HTTPServer(('0.0.0.0', port), SimpleHandler)
     logger.info(f"HTTP server running on port {port}")
+    server.serve_forever()
 
 # === Обработчики команд ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -167,7 +168,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
 # === Главная функция запуска ===
-async def main():
+def main():
+    # Запускаем HTTP сервер в отдельном потоке (для Render)
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
+    logger.info("HTTP server started in background")
+
     # Создаём приложение бота
     application = Application.builder().token(TOKEN).build()
 
@@ -176,13 +182,10 @@ async def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(button_handler))
 
-    # Запускаем HTTP сервер и бота одновременно
-    await asyncio.gather(
-        run_http_server(),
-        application.run_polling()
-    )
-
-if __name__ == "__main__":
+    # Запускаем polling бота в основном потоке
     print("Бот запускается...")
     logger.info("Бот запущен и готов к работе!")
-    asyncio.run(main())
+    application.run_polling()
+
+if __name__ == "__main__":
+    main()
