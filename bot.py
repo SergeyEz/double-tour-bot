@@ -1,10 +1,27 @@
+# bot.py
+import os
+import logging
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse
+import json
+import asyncio
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
-# === НАСТРОЙКИ ===
-TOKEN = "8321023518:AAETz3u5vnF68mcB6Bm5AYCj-W4CuX4qp9c"  # ← ЗАМЕНИТЬ!
+# === Настройка логирования ===
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-# Ссылки
+# === Токен бота из переменной окружения ===
+TOKEN = os.getenv("BOT_TOKEN")
+if not TOKEN:
+    raise ValueError("Не задана переменная окружения BOT_TOKEN")
+
+# === Ссылки ===
 LINKS = {
     "site": "https://doubleride.ru",
     "inst": "https://www.instagram.com/double.community?igsh=dTY3bDU0ZWprdmg0",
@@ -15,10 +32,10 @@ LINKS = {
     "kirovsk_info": "https://vk.com/@-88867-pro-tur-v-hibiny",
     "kirovsk_schedule": "https://vk.com/@-88867-raspisanie-gornolyzhnyh-turov-na-sezon-2021-22-vmeste-s-doub",
     "sheregesh_info": "https://vk.com/@-88867-gornolyzhnyi-tur-v-sheregesh-daty-ceny-programma-faq",
-    "sheregesh_schedule": None,  # пока нет
+    "sheregesh_schedule": "https://vk.com/double.community",  # резерв
 }
 
-# === ОБРАБОТЧИКИ ===
+# === Обработчики команд ===
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
@@ -38,11 +55,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     if update.message:
-        # Если вызван через /start — отправляем новое сообщение
         await update.message.reply_text(text, reply_markup=reply_markup, parse_mode="Markdown")
     elif update.callback_query:
-        # Если вызван через кнопку — редактируем текущее сообщение
         await update.callback_query.edit_message_text(text, reply_markup=reply_markup, parse_mode="Markdown")
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "ℹ️ *Справка по боту*\n\n"
+        "Доступные команды:\n"
+        "/start — главное меню\n"
+        "/help — эта справка\n\n"
+        "Если остались вопросы — нажми кнопку *«Остались вопросы»*."
+    )
+    await update.message.reply_text(text, parse_mode="Markdown")
 
 
 async def mountain_tours(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -56,10 +82,7 @@ async def mountain_tours(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await query.edit_message_text(
-        "🌍 Выбери направление:",
-        reply_markup=reply_markup
-    )
+    await query.edit_message_text("🌍 Выбери направление:", reply_markup=reply_markup)
 
 
 async def kirovsk_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -71,7 +94,7 @@ async def kirovsk_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📅 Расписание/цены", url=LINKS["kirovsk_schedule"])],
         [InlineKeyboardButton("✅ Бронь", url=LINKS["booking"])],
         [InlineKeyboardButton("❓ Остались вопросы", url=LINKS["booking"])],
-        [InlineKeyboardButton("🔄 Начать заново", callback_data="start")]
+        [InlineKeyboardButton("⬅️ Назад", callback_data="mountain_tours")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -89,10 +112,10 @@ async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("ℹ️ Инфо о туре", url=LINKS["sheregesh_info"])],
-        [InlineKeyboardButton("📅 Расписание/цены", url=LINKS["sheregesh_schedule"] or "https://vk.com/double.community")],  # если пусто — подставим ВК
+        [InlineKeyboardButton("📅 Расписание/цены", url=LINKS["sheregesh_schedule"])],
         [InlineKeyboardButton("✅ Бронь", url=LINKS["booking"])],
         [InlineKeyboardButton("❓ Остались вопросы", url=LINKS["booking"])],
-        [InlineKeyboardButton("🔄 Начать заново", callback_data="start")]
+        [InlineKeyboardButton("⬅️ Назад", callback_data="mountain_tours")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -104,7 +127,7 @@ async def sheregesh_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# === ОБРАБОТЧИК КНОПОК ===
+# === Обработчик кнопок ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -119,15 +142,63 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await start(update, context)
 
 
-# === ЗАПУСК БОТА ===
-def main():
-    app = Application.builder().token(TOKEN).build()
+# === HTTP-сервер для вебхука ===
+class WebhookHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        if self.path == f"/{TOKEN}":
+            try:
+                content_length = int(self.headers['Content-Length'])
+                body = self.rfile.read(content_length)
+                data = json.loads(body.decode('utf-8'))
+                update = Update.de_json(data, application.bot)
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler))
+                asyncio.run_coroutine_threadsafe(
+                    application.update_queue.put(update),
+                    loop
+                )
 
-    print("✅ Бот запущен! Ожидание команд...")
-    app.run_polling()
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b"OK")
+            except Exception as e:
+                logger.error(f"Ошибка вебхука: {e}")
+                self.send_response(500)
+                self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"Telegram Bot is running!")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+
+# === Запуск бота и сервера ===
+def run():
+    global application, loop
+    application = Application.builder().token(TOKEN).build()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Добавляем обработчики
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CallbackQueryHandler(button_handler))
+
+    # Запускаем бота в фоне
+    loop.create_task(application.run_polling())
+
+    # Запускаем веб-сервер
+    port = int(os.getenv("PORT", 10000))
+    server = HTTPServer(('', port), WebhookHandler)
+    logger.info(f"🚀 Веб-сервер запущен на порту {port}")
+    server.serve_forever()
+
 
 if __name__ == "__main__":
-    main()
+    run()
