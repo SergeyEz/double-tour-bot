@@ -159,6 +159,7 @@ def main():
 
     # Запускаем polling
     print("Бот запускается...")
+    logger.info("Бот запущен и готов к работе!")
     application.run_polling()
 
 if __name__ == "__main__":
