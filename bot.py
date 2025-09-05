@@ -150,6 +150,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "start":
         await start(update, context)
 
+print(f"Token length: {len(TOKEN)}")
+print(f"Token: '{TOKEN}'")
 # === Главная функция запуска ===
 def run():
     # Создаём приложение
@@ -167,7 +169,7 @@ def run():
     application.run_webhook(
         listen="0.0.0.0",           # обязательно
         port=port,                   # из переменной окружения
-        webhook_url=f"https://double-tour-bot.onrender.com/{TOKEN}"  # должен совпадать с setWebhook
+        webhook_url=f"https://double-tour-bot.onrender.com/{TOKEN.strip()}"
     )
 
 if __name__ == "__main__":
