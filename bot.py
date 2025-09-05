@@ -1,11 +1,6 @@
-# bot.py
 import os
 import logging
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
-import json
-
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 
 # === Настройка логирования ===
@@ -150,10 +145,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "start":
         await start(update, context)
 
-print(f"Token length: {len(TOKEN)}")
-print(f"Token: '{TOKEN}'")
 # === Главная функция запуска ===
-def run():
+def main():
     # Создаём приложение
     application = Application.builder().token(TOKEN).build()
 
@@ -162,15 +155,8 @@ def run():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(button_handler))
 
-    # Получаем порт от Render
-    port = int(os.getenv("PORT", 10000))
-
-    # Запускаем вебхук
-    application.run_webhook(
-        listen="0.0.0.0",           # обязательно
-        port=port,                   # из переменной окружения
-        webhook_url="https://double-tour-bot.onrender.com/8321023518:AAETz3u5vnF68mcB6Bm5AYCj-W4CuX4qp9c"
-    )
+    # Запускаем polling (более надежный для Render)
+    application.run_polling()
 
 if __name__ == "__main__":
-    run()
+    main()
